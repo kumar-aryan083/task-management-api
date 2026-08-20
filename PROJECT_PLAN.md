@@ -24,14 +24,13 @@ Done so far:
 - `PrismaModule`/`PrismaService` exist and are wired into `AppModule`, using the `@prisma/adapter-pg` driver adapter required by Prisma 7.
 - Prisma schema, migrations, generated client, and connection handling are explained in `LEARNING_NOTES.md`.
 - `UsersService` is fully Prisma-backed (Phase 8 complete): create/view/update/delete all go through `PrismaService`, with case-insensitive duplicate-email handling and the temporary current-user now derived from the database instead of an in-memory pointer.
+- `TasksService` is fully Prisma-backed (Phases 9 & 10 complete): create/view/update/delete/complete all go through `PrismaService`, with real database-backed filtering, case-insensitive title search, sorting, and pagination. Deleting a user now cascades to delete their tasks (`onDelete: Cascade`).
 - `docker-compose.development.yml` provides a local dev Postgres container (ahead of the full Phase 16 Docker setup, which still needs a `Dockerfile` and an app+db compose file).
 - The app builds successfully.
 - The current test suite passes.
 
 Important limitations:
 
-- Tasks are still stored in memory, not read/written through Prisma yet (`TasksService` hasn't been migrated — that's Phase 9).
-- Task list filtering, searching, sorting, and pagination are not implemented against a real database yet (still in-memory).
 - Swagger, full Docker (app container + Dockerfile), logging, health checks, and real E2E coverage are not implemented yet.
 
 ## Phase Checklist
@@ -45,8 +44,8 @@ Important limitations:
 - [x] Phase 6: Configuration
 - [x] Phase 7: PostgreSQL + Prisma Setup
 - [x] Phase 8: Move Users to Prisma
-- [ ] Phase 9: Move Tasks to Prisma
-- [ ] Phase 10: Real Task Listing
+- [x] Phase 9: Move Tasks to Prisma
+- [x] Phase 10: Real Task Listing
 - [ ] Phase 11: Exception Handling
 - [ ] Phase 12: Logging
 - [ ] Phase 13: Health Check
@@ -211,36 +210,40 @@ Verification beyond the checklist: booted the app against the dev Postgres conta
 
 ### Phase 9: Move Tasks to Prisma
 
-- [ ] Replace in-memory task storage with Prisma.
-- [ ] Implement create task with `userId`.
-- [ ] Implement get user tasks.
-- [ ] Implement get one task.
-- [ ] Implement update task.
-- [ ] Implement delete task.
-- [ ] Implement complete task.
-- [ ] Preserve validation behavior.
-- [ ] Add Prisma-mocked unit tests.
-- [ ] Run `npm test`.
-- [ ] Run `npm run build`.
-- [ ] Mark Phase 9 complete.
+- [x] Replace in-memory task storage with Prisma.
+- [x] Implement create task with `userId`. (invalid `userId` now surfaces as `NotFoundException`, not a raw FK error)
+- [x] Implement get user tasks. (`GET /tasks`, fully DB-backed — see Phase 10 below, completed alongside this)
+- [x] Implement get one task.
+- [x] Implement update task.
+- [x] Implement delete task.
+- [x] Implement complete task.
+- [x] Preserve validation behavior.
+- [x] Add Prisma-mocked unit tests. (`tasks.service.spec.ts`, mocked `PrismaService`)
+- [x] Run `npm test`. (28/28 passing)
+- [x] Run `npm run build`.
+- [x] Mark Phase 9 complete.
+
+Bug found and fixed during real end-to-end testing (not caught by mocked unit tests): deleting a user with existing tasks threw an unhandled 500 (Postgres FK violation) because the `Task.user` relation had no `onDelete` behavior. Added `onDelete: Cascade` to the schema (migration `20260820172651_cascade_delete_tasks_on_user_delete`) — deleting a user now cleanly deletes their tasks too. Verified with real `curl` requests against the dev Postgres container: invalid-`userId` task creation (404), full filter/search/sort/pagination combinations, complete/update/delete, and the cascade-delete scenario itself.
 
 ### Phase 10: Real Task Listing
 
-- [ ] Implement database-backed pagination.
-- [ ] Implement status filter.
-- [ ] Implement priority filter.
-- [ ] Implement title search.
-- [ ] Implement sorting.
-- [ ] Return list metadata:
+Completed as part of Phase 9 — moving `TasksService` to Prisma required implementing real filtering/searching/sorting/pagination at the same time to avoid regressing existing behavior, so this phase's work was already done.
+
+- [x] Implement database-backed pagination. (`skip`/`take` in `prisma.task.findMany`)
+- [x] Implement status filter.
+- [x] Implement priority filter.
+- [x] Implement title search. (case-insensitive `contains`)
+- [x] Implement sorting. (dynamic `orderBy: { [sortBy]: sortOrder }`)
+- [x] Return list metadata:
   - `items`
   - `page`
   - `limit`
   - `total`
   - `totalPages`
-- [ ] Add tests for query combinations.
-- [ ] Run `npm test`.
-- [ ] Run `npm run build`.
-- [ ] Mark Phase 10 complete.
+- [x] Add tests for query combinations. (filter, search, sort, pagination — in `tasks.service.spec.ts`)
+- [x] Run `npm test`.
+- [x] Run `npm run build`.
+- [x] Mark Phase 10 complete.
 
 ### Phase 11: Exception Handling
 

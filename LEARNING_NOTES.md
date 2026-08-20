@@ -17,8 +17,7 @@ Current important files:
 - `src/tasks/tasks.service.ts`: task business logic and current in-memory data storage.
 - `src/tasks/dto/create-task.dto.ts`: input shape and validation rules for creating tasks.
 - `src/tasks/dto/update-task.dto.ts`: input shape and validation rules for updating tasks.
-- `src/tasks/task-status.enum.ts`: allowed task status values.
-- `src/tasks/task-priority.enum.ts`: allowed task priority values.
+- `src/tasks/task.enums.ts`: every enum used by the tasks module — `TaskStatus`, `TaskPriority`, `TaskSortBy`, `SortOrder` — kept in one file per module rather than split one-enum-per-file.
 
 Express equivalent:
 
@@ -395,6 +394,26 @@ Because every method is now asynchronous (Prisma calls return promises), `UsersC
 
 Testing change: `users.service.spec.ts` no longer calls the real database. It provides a mocked `PrismaService` (plain `jest.fn()`s for `user.create`/`findFirst`/`update`/`delete`) via Nest's testing module `providers` array — `{ provide: PrismaService, useValue: prisma }`. This keeps unit tests fast and independent of Postgres, while the actual database interaction was verified separately by booting the app against the dev Postgres container and exercising `/users` end to end with `curl`.
 
+### Phase 9: Tasks moved to Prisma (and real DB-backed listing)
+
+`TasksService` no longer keeps a private `tasks: Task[]` array. Every method now goes through `PrismaService`, and — because preserving the existing filtering/searching/sorting/pagination behavior meant implementing it against a real query instead of an in-memory `.filter()`/`.sort()`/`.slice()` — this phase also fully satisfies Phase 10 (Real Task Listing) along the way:
+
+- `create(dto)`: `prisma.task.create(...)`. If `userId` doesn't reference a real user, Postgres rejects the insert with a foreign-key violation (Prisma error code `P2003`), which is caught and turned into a `NotFoundException` instead of a raw database error.
+- `findAll(query)`: builds a single `Prisma.TaskWhereInput` from the optional `status`/`priority`/`search` query params (search uses `{ contains, mode: 'insensitive' }`, matching Postgres's `ILIKE`), then runs `prisma.task.findMany({ where, orderBy, skip, take })` and `prisma.task.count({ where })` together with `Promise.all` so pagination metadata (`total`, `totalPages`) reflects the same filter as the page of results.
+- `findOne(id)` / `update(id, dto)` / `complete(id)` / `remove(id)`: each calls `findOne` first (or is `findOne` itself) so a missing task always surfaces as `NotFoundException`, not a Prisma "record not found" error.
+
+Enum unification: `TaskStatus`/`TaskPriority` are re-exported from `@prisma/client` instead of being declared separately. Both enums already had identical key/value pairs (e.g. `TODO = 'TODO'`), so this was a safe, transparent change — but it matters because TypeScript treats two separately-declared string enums as incompatible types even when their values match. Reusing Prisma's generated enum everywhere (DTO validation, service logic, Prisma queries) avoids that mismatch entirely instead of littering the code with type casts.
+
+All four task-related enums (`TaskStatus`, `TaskPriority`, `TaskSortBy`, `SortOrder`) now live together in `src/tasks/task.enums.ts`, one file per module rather than one file per enum. `TaskSortBy`/`SortOrder` moved out of `task-query.dto.ts` into this file for the same reason — a module's enums live in one place, and DTOs/services import from there.
+
+Cascading delete: deleting a user who still has tasks used to throw an unhandled 500 (a raw Postgres foreign-key violation), because the `Task.user` relation had no `onDelete` behavior defined. The schema now declares `onDelete: Cascade` on that relation (migration `20260820172651_cascade_delete_tasks_on_user_delete`), so deleting a user also deletes their tasks — matching typical "delete my account" semantics. This was found by actually exercising the API end to end, not by the mocked unit tests (which don't touch real foreign-key constraints).
+
+Testing change: `tasks.service.spec.ts` follows the same mocked-`PrismaService` pattern as `users.service.spec.ts`, with `jest.fn()`s for `task.create`/`findMany`/`count`/`findUnique`/`update`/`delete`. Query-building tests assert the exact `where`/`orderBy`/`skip`/`take` object passed to `findMany`, rather than re-testing Postgres's own filtering/sorting logic.
+
+Express equivalent:
+
+- In Express + Prisma, this same code would look almost identical — the ORM layer doesn't change based on the web framework. What NestJS adds is the dependency-injected `PrismaService` and the `@Injectable()`/`@Controller()` structure around it.
+
 ## Configuration
 
 Configuration means values the application needs at runtime but should not hard-code into source files.
@@ -469,7 +488,7 @@ Prisma is an ORM (Object-Relational Mapper). It lets the application read and wr
 
 - A `generator client` block, which tells Prisma to generate a JS/TS client (`prisma-client-js`) into `node_modules/@prisma/client`.
 - A `datasource db` block, which declares the database type (`postgresql`). Note: as of Prisma 7, the connection URL no longer lives in `schema.prisma` — it moved to `prisma.config.ts` (see below).
-- Two enums, `TaskStatus` and `TaskPriority`, matching the existing `task-status.enum.ts`/`task-priority.enum.ts` values exactly, so the database only ever stores known values.
+- Two enums, `TaskStatus` and `TaskPriority`, matching the values re-exported from `src/tasks/task.enums.ts` exactly, so the database only ever stores known values.
 - Two models, `User` and `Task`, matching the shape of the in-memory `User`/`Task` interfaces that `UsersService`/`TasksService` still use today.
 - A relation: `Task.userId` references `User.id`. This is how Prisma expresses a foreign key — each task belongs to exactly one user, and a user can have many tasks (`User.tasks`).
 - Indexes (`@@index(...)`) on `Task.userId`, `Task.status`, `Task.priority`, and `Task.dueDate` — these are the fields `TaskQueryDto` filters and sorts by (see "Query Parameters and Pagination" above), so Postgres can look them up without scanning every row once the table grows.

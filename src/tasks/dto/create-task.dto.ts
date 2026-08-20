@@ -7,8 +7,7 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
-import { TaskPriority } from '../task-priority.enum';
-import { TaskStatus } from '../task-status.enum';
+import { TaskPriority, TaskStatus } from '../task.enums';
 
 export class CreateTaskDto {
   @IsString()

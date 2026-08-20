@@ -8,22 +8,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { TaskPriority } from '../task-priority.enum';
-import { TaskStatus } from '../task-status.enum';
-
-export enum TaskSortBy {
-  CREATED_AT = 'createdAt',
-  UPDATED_AT = 'updatedAt',
-  DUE_DATE = 'dueDate',
-  TITLE = 'title',
-  STATUS = 'status',
-  PRIORITY = 'priority',
-}
-
-export enum SortOrder {
-  ASC = 'asc',
-  DESC = 'desc',
-}
+import { SortOrder, TaskPriority, TaskSortBy, TaskStatus } from '../task.enums';
 
 export class TaskQueryDto {
   @IsOptional()

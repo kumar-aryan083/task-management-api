@@ -1,17 +1,55 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { Prisma, Task } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import { TasksService } from './tasks.service';
-import { SortOrder, TaskSortBy } from './dto/task-query.dto';
-import { TaskPriority } from './task-priority.enum';
-import { TaskStatus } from './task-status.enum';
+import { SortOrder, TaskPriority, TaskSortBy, TaskStatus } from './task.enums';
+
+type MockPrismaService = {
+  task: {
+    create: jest.Mock;
+    findMany: jest.Mock;
+    count: jest.Mock;
+    findUnique: jest.Mock;
+    update: jest.Mock;
+    delete: jest.Mock;
+  };
+};
+
+function buildTask(overrides: Partial<Task> = {}): Task {
+  return {
+    id: 'task-1',
+    title: 'A task',
+    description: null,
+    status: TaskStatus.TODO,
+    priority: TaskPriority.MEDIUM,
+    dueDate: null,
+    userId: '55a0218e-376e-46d2-8fa7-d314ec77c866',
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    ...overrides,
+  };
+}
 
 describe('TasksService', () => {
   let service: TasksService;
+  let prisma: MockPrismaService;
   const userId = '55a0218e-376e-46d2-8fa7-d314ec77c866';
 
   beforeEach(async () => {
+    prisma = {
+      task: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        count: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
+    };
+
     const module: TestingModule = await Test.createTestingModule({
-      providers: [TasksService],
+      providers: [TasksService, { provide: PrismaService, useValue: prisma }],
     }).compile();
 
     service = module.get<TasksService>(TasksService);
@@ -21,25 +59,35 @@ describe('TasksService', () => {
     expect(service).toBeDefined();
   });
 
-  it('creates a task with defaults', () => {
-    const task = service.create({
-      title: 'Learn NestJS modules',
-      userId,
-    });
+  it('creates a task with defaults', async () => {
+    const created = buildTask();
+    prisma.task.create.mockResolvedValueOnce(created);
 
-    expect(typeof task.id).toBe('string');
-    expect(task.title).toBe('Learn NestJS modules');
-    expect(task.description).toBeNull();
-    expect(task.status).toBe(TaskStatus.TODO);
-    expect(task.priority).toBe(TaskPriority.MEDIUM);
-    expect(task.dueDate).toBeNull();
-    expect(task.userId).toBe(userId);
-    expect(task.createdAt).toBeInstanceOf(Date);
-    expect(task.updatedAt).toBeInstanceOf(Date);
+    const task = await service.create({ title: 'A task', userId });
+
+    expect(task).toBe(created);
+    expect(prisma.task.create).toHaveBeenCalledWith({
+      data: {
+        title: 'A task',
+        description: null,
+        status: TaskStatus.TODO,
+        priority: TaskPriority.MEDIUM,
+        dueDate: null,
+        userId,
+      },
+    });
   });
 
-  it('creates a task with optional fields', () => {
-    const task = service.create({
+  it('creates a task with optional fields', async () => {
+    const created = buildTask({
+      description: 'Cover validation later at the API boundary.',
+      status: TaskStatus.IN_PROGRESS,
+      priority: TaskPriority.HIGH,
+      dueDate: new Date('2026-09-01T10:00:00.000Z'),
+    });
+    prisma.task.create.mockResolvedValueOnce(created);
+
+    const task = await service.create({
       title: 'Write DTO tests',
       description: 'Cover validation later at the API boundary.',
       status: TaskStatus.IN_PROGRESS,
@@ -48,223 +96,209 @@ describe('TasksService', () => {
       userId,
     });
 
-    expect(task.description).toBe(
-      'Cover validation later at the API boundary.',
-    );
-    expect(task.status).toBe(TaskStatus.IN_PROGRESS);
-    expect(task.priority).toBe(TaskPriority.HIGH);
     expect(task.dueDate).toEqual(new Date('2026-09-01T10:00:00.000Z'));
+    expect(prisma.task.create).toHaveBeenCalledWith({
+      data: {
+        title: 'Write DTO tests',
+        description: 'Cover validation later at the API boundary.',
+        status: TaskStatus.IN_PROGRESS,
+        priority: TaskPriority.HIGH,
+        dueDate: new Date('2026-09-01T10:00:00.000Z'),
+        userId,
+      },
+    });
   });
 
-  it('finds all tasks', () => {
-    const firstTask = service.create({
-      title: 'First task',
-      userId,
-    });
-    const secondTask = service.create({
-      title: 'Second task',
-      userId,
-    });
+  it('throws NotFoundException when the referenced user does not exist', async () => {
+    prisma.task.create.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Foreign key violation', {
+        code: 'P2003',
+        clientVersion: 'test',
+      }),
+    );
 
-    const result = service.findAll();
-
-    expect(result.items).toHaveLength(2);
-    expect(result.items).toContain(firstTask);
-    expect(result.items).toContain(secondTask);
-    expect(result.page).toBe(1);
-    expect(result.limit).toBe(20);
-    expect(result.total).toBe(2);
-    expect(result.totalPages).toBe(1);
+    await expect(service.create({ title: 'A task', userId })).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
-  it('filters tasks by status and priority', () => {
-    service.create({
-      title: 'Low priority todo',
-      status: TaskStatus.TODO,
-      priority: TaskPriority.LOW,
-      userId,
+  it('finds all tasks with pagination metadata', async () => {
+    const items = [buildTask(), buildTask({ id: 'task-2' })];
+    prisma.task.findMany.mockResolvedValueOnce(items);
+    prisma.task.count.mockResolvedValueOnce(2);
+
+    const result = await service.findAll();
+
+    expect(result).toEqual({
+      items,
+      page: 1,
+      limit: 20,
+      total: 2,
+      totalPages: 1,
     });
-    const matchingTask = service.create({
-      title: 'High priority done',
+    expect(prisma.task.findMany).toHaveBeenCalledWith({
+      where: {},
+      orderBy: { createdAt: 'desc' },
+      skip: 0,
+      take: 20,
+    });
+    expect(prisma.task.count).toHaveBeenCalledWith({ where: {} });
+  });
+
+  it('filters tasks by status and priority', async () => {
+    prisma.task.findMany.mockResolvedValueOnce([]);
+    prisma.task.count.mockResolvedValueOnce(0);
+
+    await service.findAll({
       status: TaskStatus.DONE,
       priority: TaskPriority.HIGH,
-      userId,
     });
 
-    expect(
-      service.findAll({
-        status: TaskStatus.DONE,
-        priority: TaskPriority.HIGH,
+    expect(prisma.task.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { status: TaskStatus.DONE, priority: TaskPriority.HIGH },
       }),
-    ).toEqual({
-      items: [matchingTask],
-      page: 1,
-      limit: 20,
-      total: 1,
-      totalPages: 1,
-    });
+    );
   });
 
-  it('searches tasks by title', () => {
-    const matchingTask = service.create({
-      title: 'Learn NestJS pipes',
-      userId,
-    });
-    service.create({
-      title: 'Write Docker notes',
-      userId,
-    });
+  it('searches tasks by title case-insensitively', async () => {
+    prisma.task.findMany.mockResolvedValueOnce([]);
+    prisma.task.count.mockResolvedValueOnce(0);
 
-    expect(
-      service.findAll({
-        search: 'nestjs',
+    await service.findAll({ search: 'nestjs' });
+
+    expect(prisma.task.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { title: { contains: 'nestjs', mode: 'insensitive' } },
       }),
-    ).toEqual({
-      items: [matchingTask],
-      page: 1,
-      limit: 20,
-      total: 1,
-      totalPages: 1,
-    });
+    );
   });
 
-  it('sorts tasks', () => {
-    const firstTask = service.create({
-      title: 'B task',
-      userId,
-    });
-    const secondTask = service.create({
-      title: 'A task',
-      userId,
+  it('sorts tasks', async () => {
+    prisma.task.findMany.mockResolvedValueOnce([]);
+    prisma.task.count.mockResolvedValueOnce(0);
+
+    await service.findAll({
+      sortBy: TaskSortBy.TITLE,
+      sortOrder: SortOrder.ASC,
     });
 
-    expect(
-      service.findAll({
-        sortBy: TaskSortBy.TITLE,
-        sortOrder: SortOrder.ASC,
-      }).items,
-    ).toEqual([secondTask, firstTask]);
+    expect(prisma.task.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { title: 'asc' } }),
+    );
   });
 
-  it('paginates tasks', () => {
-    service.create({
-      title: 'First task',
-      userId,
-    });
-    const secondTask = service.create({
-      title: 'Second task',
-      userId,
-    });
-    service.create({
-      title: 'Third task',
-      userId,
-    });
+  it('paginates tasks', async () => {
+    prisma.task.findMany.mockResolvedValueOnce([buildTask({ id: 'task-2' })]);
+    prisma.task.count.mockResolvedValueOnce(3);
 
-    expect(
-      service.findAll({
-        page: 2,
-        limit: 1,
-        sortBy: TaskSortBy.TITLE,
-        sortOrder: SortOrder.ASC,
-      }),
-    ).toEqual({
-      items: [secondTask],
-      page: 2,
-      limit: 1,
-      total: 3,
-      totalPages: 3,
-    });
+    const result = await service.findAll({ page: 2, limit: 1 });
+
+    expect(result.page).toBe(2);
+    expect(result.limit).toBe(1);
+    expect(result.total).toBe(3);
+    expect(result.totalPages).toBe(3);
+    expect(prisma.task.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 1, take: 1 }),
+    );
   });
 
-  it('finds one task by id', () => {
-    const task = service.create({
-      title: 'Find this task',
-      userId,
-    });
+  it('finds one task by id', async () => {
+    const task = buildTask();
+    prisma.task.findUnique.mockResolvedValueOnce(task);
 
-    expect(service.findOne(task.id)).toBe(task);
+    expect(await service.findOne(task.id)).toBe(task);
   });
 
-  it('throws when finding a missing task', () => {
-    expect(() =>
+  it('throws when finding a missing task', async () => {
+    prisma.task.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
       service.findOne('7354d194-9a22-4865-8128-cc0fb0b33267'),
-    ).toThrow(NotFoundException);
+    ).rejects.toThrow(NotFoundException);
   });
 
-  it('updates a task', () => {
-    const task = service.create({
-      title: 'Old title',
-      status: TaskStatus.TODO,
-      userId,
+  it('updates a task', async () => {
+    const task = buildTask();
+    const updated = buildTask({
+      title: 'New title',
+      status: TaskStatus.IN_PROGRESS,
+      priority: TaskPriority.LOW,
     });
-    const originalUpdatedAt = task.updatedAt;
+    prisma.task.findUnique.mockResolvedValueOnce(task);
+    prisma.task.update.mockResolvedValueOnce(updated);
 
-    const updatedTask = service.update(task.id, {
+    const result = await service.update(task.id, {
       title: 'New title',
       status: TaskStatus.IN_PROGRESS,
       priority: TaskPriority.LOW,
     });
 
-    expect(updatedTask).toBe(task);
-    expect(updatedTask.title).toBe('New title');
-    expect(updatedTask.status).toBe(TaskStatus.IN_PROGRESS);
-    expect(updatedTask.priority).toBe(TaskPriority.LOW);
-    expect(updatedTask.updatedAt.getTime()).toBeGreaterThanOrEqual(
-      originalUpdatedAt.getTime(),
-    );
+    expect(result).toBe(updated);
+    expect(prisma.task.update).toHaveBeenCalledWith({
+      where: { id: task.id },
+      data: {
+        title: 'New title',
+        status: TaskStatus.IN_PROGRESS,
+        priority: TaskPriority.LOW,
+        dueDate: undefined,
+      },
+    });
   });
 
-  it('keeps the existing due date when update dto does not include one', () => {
-    const task = service.create({
-      title: 'Task with due date',
-      dueDate: '2026-09-01T10:00:00.000Z',
-      userId,
-    });
+  it('keeps the existing due date when update dto does not include one', async () => {
+    const task = buildTask({ dueDate: new Date('2026-09-01T10:00:00.000Z') });
+    prisma.task.findUnique.mockResolvedValueOnce(task);
+    prisma.task.update.mockResolvedValueOnce(task);
 
-    const updatedTask = service.update(task.id, {
-      title: 'Still has due date',
-    });
+    await service.update(task.id, { title: 'Still has due date' });
 
-    expect(updatedTask.dueDate).toEqual(new Date('2026-09-01T10:00:00.000Z'));
+    expect(prisma.task.update).toHaveBeenCalledWith({
+      where: { id: task.id },
+      data: { title: 'Still has due date', dueDate: undefined },
+    });
   });
 
-  it('marks a task as completed', () => {
-    const task = service.create({
-      title: 'Complete this task',
-      status: TaskStatus.IN_PROGRESS,
-      userId,
+  it('marks a task as completed', async () => {
+    const task = buildTask({ status: TaskStatus.IN_PROGRESS });
+    const completed = buildTask({ status: TaskStatus.DONE });
+    prisma.task.findUnique.mockResolvedValueOnce(task);
+    prisma.task.update.mockResolvedValueOnce(completed);
+
+    const result = await service.complete(task.id);
+
+    expect(result.status).toBe(TaskStatus.DONE);
+    expect(prisma.task.update).toHaveBeenCalledWith({
+      where: { id: task.id },
+      data: { status: TaskStatus.DONE },
     });
-    const originalUpdatedAt = task.updatedAt;
-
-    const completedTask = service.complete(task.id);
-
-    expect(completedTask).toBe(task);
-    expect(completedTask.status).toBe(TaskStatus.DONE);
-    expect(completedTask.updatedAt.getTime()).toBeGreaterThanOrEqual(
-      originalUpdatedAt.getTime(),
-    );
   });
 
-  it('throws when completing a missing task', () => {
-    expect(() =>
+  it('throws when completing a missing task', async () => {
+    prisma.task.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
       service.complete('7354d194-9a22-4865-8128-cc0fb0b33267'),
-    ).toThrow(NotFoundException);
+    ).rejects.toThrow(NotFoundException);
+    expect(prisma.task.update).not.toHaveBeenCalled();
   });
 
-  it('deletes a task', () => {
-    const task = service.create({
-      title: 'Delete this task',
-      userId,
-    });
+  it('deletes a task', async () => {
+    const task = buildTask();
+    prisma.task.findUnique.mockResolvedValueOnce(task);
+    prisma.task.delete.mockResolvedValueOnce(task);
 
-    service.remove(task.id);
+    await service.remove(task.id);
 
-    expect(service.findAll().items).toEqual([]);
+    expect(prisma.task.delete).toHaveBeenCalledWith({ where: { id: task.id } });
   });
 
-  it('throws when deleting a missing task', () => {
-    expect(() =>
+  it('throws when deleting a missing task', async () => {
+    prisma.task.findUnique.mockResolvedValueOnce(null);
+
+    await expect(
       service.remove('7354d194-9a22-4865-8128-cc0fb0b33267'),
-    ).toThrow(NotFoundException);
+    ).rejects.toThrow(NotFoundException);
+    expect(prisma.task.delete).not.toHaveBeenCalled();
   });
 });

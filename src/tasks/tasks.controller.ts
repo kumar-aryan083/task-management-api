@@ -9,8 +9,9 @@ import {
   Body,
   Query,
 } from '@nestjs/common';
+import { Task } from '@prisma/client';
 import { TasksService } from './tasks.service';
-import type { Task, TaskListResponse } from './tasks.service';
+import type { TaskListResponse } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskQueryDto } from './dto/task-query.dto';
@@ -20,22 +21,22 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
-  create(@Body() dto: CreateTaskDto): Task {
+  create(@Body() dto: CreateTaskDto): Promise<Task> {
     return this.tasksService.create(dto);
   }
 
   @Get()
-  findAll(@Query() query: TaskQueryDto): TaskListResponse {
+  findAll(@Query() query: TaskQueryDto): Promise<TaskListResponse> {
     return this.tasksService.findAll(query);
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) id: string): Task {
+  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<Task> {
     return this.tasksService.findOne(id);
   }
 
   @Patch(':id/complete')
-  complete(@Param('id', ParseUUIDPipe) id: string): Task {
+  complete(@Param('id', ParseUUIDPipe) id: string): Promise<Task> {
     return this.tasksService.complete(id);
   }
 
@@ -43,12 +44,12 @@ export class TasksController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTaskDto,
-  ): Task {
+  ): Promise<Task> {
     return this.tasksService.update(id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseUUIDPipe) id: string): void {
-    this.tasksService.remove(id);
+  remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    return this.tasksService.remove(id);
   }
 }
