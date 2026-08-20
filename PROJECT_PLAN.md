@@ -139,22 +139,22 @@ Baseline notes:
 
 ### Phase 5: Users Module
 
-- [ ] Create `UsersModule`.
-- [ ] Create `UsersController`.
-- [ ] Create `UsersService`.
-- [ ] Create DTOs:
+- [x] Create `UsersModule`.
+- [x] Create `UsersController`.
+- [x] Create `UsersService`.
+- [x] Create DTOs:
   - `CreateUserDto`
   - `UpdateUserDto`
-- [ ] Add user routes:
+- [x] Add user routes:
   - `POST /users`
   - `GET /users/me`
   - `PATCH /users/me`
   - `DELETE /users/me`
-- [ ] Use a simple temporary current-user approach until authentication is introduced or clarified.
-- [ ] Add user validation rules.
-- [ ] Add user service tests.
-- [ ] Run `npm test`.
-- [ ] Run `npm run build`.
+- [x] Use a simple temporary current-user approach until authentication is introduced or clarified.
+- [x] Add user validation rules.
+- [x] Add user service tests.
+- [x] Run `npm test`.
+- [x] Run `npm run build`.
 - [ ] Mark Phase 5 complete.
 
 ### Phase 6: Configuration

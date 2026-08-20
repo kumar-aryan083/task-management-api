@@ -323,3 +323,62 @@ If the task does not exist, `findOne()` throws `NotFoundException`, and NestJS t
 Express equivalent:
 
 - In Express, this would be a route like `router.patch('/tasks/:id/complete', handler)`, and the handler would manually call a service function.
+
+## Users Module
+
+`UsersModule` is the second feature module in this project.
+
+It contains:
+
+- `UsersController`: HTTP routes for user actions.
+- `UsersService`: temporary in-memory user storage and user business logic.
+- `CreateUserDto`: request body rules for creating a user.
+- `UpdateUserDto`: request body rules for updating a user.
+
+Current user routes:
+
+```text
+POST   /users
+GET    /users/me
+PATCH  /users/me
+DELETE /users/me
+```
+
+Current user fields:
+
+- `id`
+- `name`
+- `email`
+- `createdAt`
+- `updatedAt`
+
+Temporary current-user behavior:
+
+- The project does not have authentication yet.
+- For now, the most recently created user becomes the temporary current user.
+- `/users/me` reads, updates, or deletes that temporary current user.
+- This keeps the beginner API moving without adding guards, JWTs, sessions, or passwords too early.
+
+Why this is temporary:
+
+- A real API should not decide the current user from the most recently created user.
+- Later projects or phases can introduce authentication properly.
+- When Prisma is added, users will be stored in PostgreSQL instead of an in-memory array.
+
+Validation rules:
+
+- `name` must be a non-empty string.
+- `name` has a maximum length of 100 characters.
+- `email` must be a valid email address.
+- `email` has a maximum length of 255 characters.
+
+Error behavior:
+
+- Creating a user with an existing email throws `ConflictException`.
+- Reading, updating, or deleting `/users/me` with no temporary current user throws `NotFoundException`.
+
+Express equivalent:
+
+- In Express, user routes would usually live in a user router file.
+- Validation would usually happen through middleware or explicit schema parsing.
+- The router would manually call service functions for create, read, update, and delete behavior.
