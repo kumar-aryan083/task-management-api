@@ -100,6 +100,13 @@ export class TasksService {
     return task;
   }
 
+  complete(id: string): Task {
+    const task = this.findOne(id);
+    task.status = TaskStatus.DONE;
+    task.updatedAt = new Date();
+    return task;
+  }
+
   remove(id: string): void {
     const task = this.findOne(id);
     this.tasks = this.tasks.filter((t) => t.id !== task.id);

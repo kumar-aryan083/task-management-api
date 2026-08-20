@@ -292,3 +292,34 @@ Why include metadata:
 Express equivalent:
 
 - In Express, you would usually read `req.query.page`, `req.query.limit`, and other values manually, convert strings to numbers yourself, validate them, and pass them into a service.
+
+## Action-Specific Routes
+
+Most task updates go through `PATCH /tasks/:id` because the client sends fields to change.
+
+Marking a task complete has its own endpoint:
+
+```text
+PATCH /tasks/:id/complete
+```
+
+Why use a separate route here:
+
+- Completing a task is a common domain action.
+- The client does not need to know the internal status value.
+- The service can keep the rule in one place: completed tasks use `TaskStatus.DONE`.
+
+In the controller, the complete route calls `TasksService.complete(id)`.
+
+In the service, `complete()`:
+
+- Finds the task.
+- Sets `status` to `DONE`.
+- Updates `updatedAt`.
+- Returns the updated task.
+
+If the task does not exist, `findOne()` throws `NotFoundException`, and NestJS turns that into a `404` HTTP response.
+
+Express equivalent:
+
+- In Express, this would be a route like `router.patch('/tasks/:id/complete', handler)`, and the handler would manually call a service function.

@@ -228,6 +228,29 @@ describe('TasksService', () => {
     expect(updatedTask.dueDate).toEqual(new Date('2026-09-01T10:00:00.000Z'));
   });
 
+  it('marks a task as completed', () => {
+    const task = service.create({
+      title: 'Complete this task',
+      status: TaskStatus.IN_PROGRESS,
+      userId,
+    });
+    const originalUpdatedAt = task.updatedAt;
+
+    const completedTask = service.complete(task.id);
+
+    expect(completedTask).toBe(task);
+    expect(completedTask.status).toBe(TaskStatus.DONE);
+    expect(completedTask.updatedAt.getTime()).toBeGreaterThanOrEqual(
+      originalUpdatedAt.getTime(),
+    );
+  });
+
+  it('throws when completing a missing task', () => {
+    expect(() =>
+      service.complete('7354d194-9a22-4865-8128-cc0fb0b33267'),
+    ).toThrow(NotFoundException);
+  });
+
   it('deletes a task', () => {
     const task = service.create({
       title: 'Delete this task',

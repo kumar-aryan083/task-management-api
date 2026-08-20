@@ -35,8 +35,8 @@ Important limitations:
 - [x] Phase 0: Baseline Review
 - [x] Phase 1: Learning Notes Setup
 - [x] Phase 2: Clean Current Task Module
-- [ ] Phase 3: Add Task Query DTO
-- [ ] Phase 4: Add Complete Task Endpoint
+- [x] Phase 3: Add Task Query DTO
+- [x] Phase 4: Add Complete Task Endpoint
 - [ ] Phase 5: Users Module
 - [ ] Phase 6: Configuration
 - [ ] Phase 7: PostgreSQL + Prisma Setup
@@ -124,18 +124,18 @@ Baseline notes:
 - [x] Add tests for task query behavior.
 - [x] Run `npm test`.
 - [x] Run `npm run build`.
-- [ ] Mark Phase 3 complete.
+- [x] Mark Phase 3 complete.
 
 ### Phase 4: Add Complete Task Endpoint
 
-- [ ] Add `PATCH /tasks/:id/complete`.
-- [ ] Update task status to `DONE`.
-- [ ] Update `updatedAt`.
-- [ ] Add unit tests.
-- [ ] Leave fuller E2E coverage for the database-backed API phase.
-- [ ] Run `npm test`.
-- [ ] Run `npm run build`.
-- [ ] Mark Phase 4 complete.
+- [x] Add `PATCH /tasks/:id/complete`.
+- [x] Update task status to `DONE`.
+- [x] Update `updatedAt`.
+- [x] Add unit tests.
+- [x] Leave fuller E2E coverage for the database-backed API phase.
+- [x] Run `npm test`.
+- [x] Run `npm run build`.
+- [x] Mark Phase 4 complete.
 
 ### Phase 5: Users Module
 
