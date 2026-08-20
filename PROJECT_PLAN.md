@@ -18,17 +18,20 @@ Done so far:
 - `CreateTaskDto` and `UpdateTaskDto` exist.
 - Global validation is configured in `main.ts`.
 - Basic task CRUD endpoints exist.
+- `UsersModule` exists with temporary current-user behavior.
+- Environment configuration (`@nestjs/config`, `src/config/env.ts`, `.env.example`) is in place.
+- Prisma is fully set up (Phase 7 complete): `prisma/schema.prisma` defines `User`/`Task` models, `TaskStatus`/`TaskPriority` enums, the user-task relation, and indexes on `userId`/`status`/`priority`/`dueDate`; two migrations have been created and applied against a local dev Postgres container.
+- `PrismaModule`/`PrismaService` exist and are wired into `AppModule`, using the `@prisma/adapter-pg` driver adapter required by Prisma 7.
+- Prisma schema, migrations, generated client, and connection handling are explained in `LEARNING_NOTES.md`.
+- `docker-compose.development.yml` provides a local dev Postgres container (ahead of the full Phase 16 Docker setup, which still needs a `Dockerfile` and an app+db compose file).
 - The app builds successfully.
 - The current test suite passes.
 
 Important limitations:
 
-- Tasks are stored in memory, not PostgreSQL.
-- There is no `UsersModule` yet.
-- There is no Prisma setup yet.
-- Task list filtering, searching, sorting, and pagination are not implemented yet.
-- Swagger, Docker, logging, health checks, and real E2E coverage are not implemented yet.
-- `LEARNING_NOTES.md` still needs to be created and maintained.
+- Tasks and users are still stored in memory, not read/written through Prisma yet (`TasksService`/`UsersService` haven't been migrated — that's Phases 8 and 9).
+- Task list filtering, searching, sorting, and pagination are not implemented against a real database yet (still in-memory).
+- Swagger, full Docker (app container + Dockerfile), logging, health checks, and real E2E coverage are not implemented yet.
 
 ## Phase Checklist
 
@@ -37,9 +40,9 @@ Important limitations:
 - [x] Phase 2: Clean Current Task Module
 - [x] Phase 3: Add Task Query DTO
 - [x] Phase 4: Add Complete Task Endpoint
-- [ ] Phase 5: Users Module
-- [ ] Phase 6: Configuration
-- [ ] Phase 7: PostgreSQL + Prisma Setup
+- [x] Phase 5: Users Module
+- [x] Phase 6: Configuration
+- [x] Phase 7: PostgreSQL + Prisma Setup
 - [ ] Phase 8: Move Users to Prisma
 - [ ] Phase 9: Move Tasks to Prisma
 - [ ] Phase 10: Real Task Listing
@@ -155,39 +158,39 @@ Baseline notes:
 - [x] Add user service tests.
 - [x] Run `npm test`.
 - [x] Run `npm run build`.
-- [ ] Mark Phase 5 complete.
+- [x] Mark Phase 5 complete.
 
 ### Phase 6: Configuration
 
-- [ ] Add environment configuration support.
-- [ ] Add `.env.example`.
-- [ ] Configure app port from environment.
-- [ ] Configure database URL from environment.
-- [ ] Make sure real secrets are not committed.
-- [ ] Explain configuration in `LEARNING_NOTES.md`.
-- [ ] Run `npm test`.
-- [ ] Run `npm run build`.
-- [ ] Mark Phase 6 complete.
+- [x] Add environment configuration support.
+- [x] Add `.env.example`.
+- [x] Configure app port from environment.
+- [x] Configure database URL from environment.
+- [x] Make sure real secrets are not committed.
+- [x] Explain configuration in `LEARNING_NOTES.md`.
+- [x] Run `npm test`.
+- [x] Run `npm run build`.
+- [x] Mark Phase 6 complete.
 
 ### Phase 7: PostgreSQL + Prisma Setup
 
-- [ ] Install Prisma dependencies.
-- [ ] Initialize Prisma.
-- [ ] Create `DatabaseModule`.
-- [ ] Create `PrismaService`.
-- [ ] Add graceful Prisma connection handling.
-- [ ] Define Prisma models:
+- [x] Install Prisma dependencies. (`prisma`, `@prisma/client`, `@prisma/adapter-pg`, `pg` — Prisma 7 requires an explicit driver adapter at runtime)
+- [x] Initialize Prisma. (`prisma/schema.prisma` + `prisma.config.ts` — Prisma 7 moved the datasource URL out of `schema.prisma`)
+- [x] Create `DatabaseModule`. (named `PrismaModule` instead — same role: a `@Global()` module exporting `PrismaService`)
+- [x] Create `PrismaService`.
+- [x] Add graceful Prisma connection handling. (`onModuleInit`/`onModuleDestroy` connect/disconnect)
+- [x] Define Prisma models:
   - `User`
   - `Task`
-- [ ] Add task status enum.
-- [ ] Add task priority enum.
-- [ ] Add user-task relation.
-- [ ] Add justified indexes for common query fields.
-- [ ] Create and run initial migration.
-- [ ] Explain schema, migrations, generated client, and relations in `LEARNING_NOTES.md`.
-- [ ] Run `npm test`.
-- [ ] Run `npm run build`.
-- [ ] Mark Phase 7 complete.
+- [x] Add task status enum.
+- [x] Add task priority enum.
+- [x] Add user-task relation.
+- [x] Add justified indexes for common query fields. (`Task.userId`, `Task.status`, `Task.priority`, `Task.dueDate` — the fields `TaskQueryDto` filters/sorts by; added via migration `20260820171241_add_task_query_indexes`)
+- [x] Create and run initial migration. (`prisma/migrations/20260820170542_init`, applied to the dev Postgres container)
+- [x] Explain schema, migrations, generated client, and relations in `LEARNING_NOTES.md`.
+- [x] Run `npm test`.
+- [x] Run `npm run build`.
+- [x] Mark Phase 7 complete.
 
 ### Phase 8: Move Users to Prisma
 
@@ -304,6 +307,8 @@ Baseline notes:
 - [ ] Mark Phase 15 complete.
 
 ### Phase 16: Docker
+
+Note: `docker-compose.development.yml` (dev-only Postgres container, no app container) was added early to support Phase 7 work. The remaining items below are still open.
 
 - [ ] Add `Dockerfile`.
 - [ ] Add `docker-compose.yml`.
