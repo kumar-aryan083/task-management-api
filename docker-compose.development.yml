@@ -1,3 +1,5 @@
+name: task-management-api-dev
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -19,3 +21,8 @@ services:
 
 volumes:
   postgres_dev_data:
+    # Pinned to the volume's actual existing name so changing the project
+    # name above can never cause Compose to resolve a different (empty)
+    # volume and silently orphan the real dev data.
+    external: true
+    name: task-management-api_postgres_dev_data

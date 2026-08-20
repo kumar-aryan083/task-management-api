@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, Task } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
@@ -18,11 +18,13 @@ const FOREIGN_KEY_VIOLATION = 'P2003';
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateTaskDto): Promise<Task> {
     try {
-      return await this.prisma.task.create({
+      const task = await this.prisma.task.create({
         data: {
           title: dto.title,
           description: dto.description ?? null,
@@ -32,11 +34,17 @@ export class TasksService {
           userId: dto.userId,
         },
       });
+      this.logger.log(`Created task id=${task.id} userId=${task.userId}`);
+
+      return task;
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === FOREIGN_KEY_VIOLATION
       ) {
+        this.logger.warn(
+          `Rejected task creation for missing userId=${dto.userId}`,
+        );
         throw new NotFoundException(`User with id ${dto.userId} not found`);
       }
 
@@ -66,6 +74,7 @@ export class TasksService {
       }),
       this.prisma.task.count({ where }),
     ]);
+    this.logger.log(`Listed tasks page=${page} limit=${limit} total=${total}`);
 
     return {
       items,
@@ -80,6 +89,7 @@ export class TasksService {
     const task = await this.prisma.task.findUnique({ where: { id } });
 
     if (!task) {
+      this.logger.warn(`Task not found id=${id}`);
       throw new NotFoundException(`Task with id ${id} not found`);
     }
 
@@ -89,26 +99,33 @@ export class TasksService {
   async update(id: string, dto: UpdateTaskDto): Promise<Task> {
     await this.findOne(id);
 
-    return this.prisma.task.update({
+    const updated = await this.prisma.task.update({
       where: { id },
       data: {
         ...dto,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       },
     });
+    this.logger.log(`Updated task id=${id}`);
+
+    return updated;
   }
 
   async complete(id: string): Promise<Task> {
     await this.findOne(id);
 
-    return this.prisma.task.update({
+    const completed = await this.prisma.task.update({
       where: { id },
       data: { status: TaskStatus.DONE },
     });
+    this.logger.log(`Completed task id=${id}`);
+
+    return completed;
   }
 
   async remove(id: string): Promise<void> {
     await this.findOne(id);
     await this.prisma.task.delete({ where: { id } });
+    this.logger.log(`Deleted task id=${id}`);
   }
 }

@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { envConfig } from './config/env';
+import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { TasksModule } from './tasks/tasks.module';
 import { UsersModule } from './users/users.module';
@@ -14,6 +15,7 @@ import { UsersModule } from './users/users.module';
       load: [envConfig],
     }),
     PrismaModule,
+    HealthModule,
     TasksModule,
     UsersModule,
   ],

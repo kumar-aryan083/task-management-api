@@ -1,0 +1,67 @@
+name: task-management-api-full-stack
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: task-management-api-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-task_management_api}
+    # No published port: the app and migrate services reach this container
+    # over the internal Docker network (host "postgres", port 5432), and this
+    # host already has other Postgres instances on 5432/5433.
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d task_management_api']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build:
+      context: .
+      target: builder
+    command: ['npx', 'prisma', 'migrate', 'deploy']
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/task_management_api?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build:
+      context: .
+      target: runner
+    container_name: task-management-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/task_management_api?schema=public
+      PORT: 3000
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # Ensures SIGTERM is forwarded correctly so app.enableShutdownHooks() and
+    # PrismaService's onModuleDestroy actually run on `docker compose down`.
+    init: true
+    healthcheck:
+      # bookworm-slim has no curl/wget; Node's built-in fetch works instead.
+      test:
+        [
+          'CMD-SHELL',
+          "node -e \"fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:

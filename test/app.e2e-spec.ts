@@ -1,29 +1,39 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module';
+import { body, createTestApp, resetDatabase, TestApp } from './utils/test-app';
+
+interface HealthBody {
+  status: string;
+  info: { database?: { status: string } };
+}
 
 describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+  let testApp: TestApp;
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    await app.init();
+  beforeAll(async () => {
+    testApp = await createTestApp();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
+  beforeEach(async () => {
+    await resetDatabase(testApp.prisma);
+  });
+
+  afterAll(async () => {
+    await testApp.app.close();
+  });
+
+  it('/ (GET) — proves the full module graph (including Prisma/the database) boots', () => {
+    return request(testApp.app.getHttpServer())
       .get('/')
       .expect(200)
       .expect('Hello World!');
   });
 
-  afterEach(async () => {
-    await app.close();
+  it('/health (GET) — reports the app and database as up against the real test database', async () => {
+    const response = await request(testApp.app.getHttpServer()).get('/health');
+    const healthBody = body<HealthBody>(response);
+
+    expect(response.status).toBe(200);
+    expect(healthBody.status).toBe('ok');
+    expect(healthBody.info.database?.status).toBe('up');
   });
 });

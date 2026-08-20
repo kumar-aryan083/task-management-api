@@ -8,30 +8,15 @@ The final project should cover the full `PROJECT_SPEC.md`: NestJS modules, contr
 
 ## Current Status
 
-This project currently has a basic NestJS application with an in-memory `TasksModule`.
+**All 18 phases are complete.** The project fully covers `PROJECT_SPEC.md`'s functional requirements and NestJS learning objectives:
 
-Done so far:
+- **Users & Tasks** (Phases 2–10): full CRUD for both, Prisma-backed (no in-memory storage anywhere), with pagination/filtering/search/sorting on task listing and cascade-delete from user to their tasks.
+- **Configuration & Prisma** (Phases 6–7): typed, validated env config; `prisma/schema.prisma` with `User`/`Task` models, enums, indexes, and three applied migrations; `PrismaService` using the `@prisma/adapter-pg` driver adapter required by Prisma 7.
+- **Exception handling & logging** (Phases 11–12): a global `PrismaExceptionFilter` sanitizes every unhandled database error; per-operation service logging plus a global HTTP request logger, both PII-free (ids only, never emails).
+- **Health, Swagger, E2E, Docker** (Phases 13–16): `GET /health` via `@nestjs/terminus`; full interactive API docs at `/docs`; a real E2E suite (`npm run test:e2e`) against a dedicated test database; both a dev-only Postgres compose file and a fully containerized app+db Docker Compose stack.
+- **Docs & verification** (Phases 17–18): `README.md` fully rewritten and verified command-by-command against the real running app; `npm run build`, `npm test` (42/42), and `npm run test:e2e` (24/24) all pass; every route walked end-to-end against the containerized stack.
 
-- Basic NestJS project structure exists.
-- `TasksModule`, `TasksController`, and `TasksService` exist.
-- Task status and priority enums exist.
-- `CreateTaskDto` and `UpdateTaskDto` exist.
-- Global validation is configured in `main.ts`.
-- Basic task CRUD endpoints exist.
-- `UsersModule` exists with temporary current-user behavior.
-- Environment configuration (`@nestjs/config`, `src/config/env.ts`, `.env.example`) is in place.
-- Prisma is fully set up (Phase 7 complete): `prisma/schema.prisma` defines `User`/`Task` models, `TaskStatus`/`TaskPriority` enums, the user-task relation, and indexes on `userId`/`status`/`priority`/`dueDate`; two migrations have been created and applied against a local dev Postgres container.
-- `PrismaModule`/`PrismaService` exist and are wired into `AppModule`, using the `@prisma/adapter-pg` driver adapter required by Prisma 7.
-- Prisma schema, migrations, generated client, and connection handling are explained in `LEARNING_NOTES.md`.
-- `UsersService` is fully Prisma-backed (Phase 8 complete): create/view/update/delete all go through `PrismaService`, with case-insensitive duplicate-email handling and the temporary current-user now derived from the database instead of an in-memory pointer.
-- `TasksService` is fully Prisma-backed (Phases 9 & 10 complete): create/view/update/delete/complete all go through `PrismaService`, with real database-backed filtering, case-insensitive title search, sorting, and pagination. Deleting a user now cascades to delete their tasks (`onDelete: Cascade`).
-- `docker-compose.development.yml` provides a local dev Postgres container (ahead of the full Phase 16 Docker setup, which still needs a `Dockerfile` and an app+db compose file).
-- The app builds successfully.
-- The current test suite passes.
-
-Important limitations:
-
-- Swagger, full Docker (app container + Dockerfile), logging, health checks, and real E2E coverage are not implemented yet.
+Known, deliberate limitations (documented in `README.md`'s "Known limitations" and explained in `LEARNING_NOTES.md`, not oversights): no authentication (`/users/me` = most recently created user; `GET /tasks` isn't scoped per user), offset-based pagination, and — since there's no auth — no code path ever throws `UnauthorizedException`/`ForbiddenException`, and no operation needed a Prisma transaction (nothing writes to more than one table atomically).
 
 ## Phase Checklist
 
@@ -46,14 +31,14 @@ Important limitations:
 - [x] Phase 8: Move Users to Prisma
 - [x] Phase 9: Move Tasks to Prisma
 - [x] Phase 10: Real Task Listing
-- [ ] Phase 11: Exception Handling
-- [ ] Phase 12: Logging
-- [ ] Phase 13: Health Check
-- [ ] Phase 14: Swagger/OpenAPI
-- [ ] Phase 15: E2E Tests
-- [ ] Phase 16: Docker
-- [ ] Phase 17: Final Documentation
-- [ ] Phase 18: Final Verification
+- [x] Phase 11: Exception Handling
+- [x] Phase 12: Logging
+- [x] Phase 13: Health Check
+- [x] Phase 14: Swagger/OpenAPI
+- [x] Phase 15: E2E Tests
+- [x] Phase 16: Docker
+- [x] Phase 17: Final Documentation
+- [x] Phase 18: Final Verification
 
 ## Detailed Phase Plan
 
@@ -247,144 +232,170 @@ Completed as part of Phase 9 — moving `TasksService` to Prisma required implem
 
 ### Phase 11: Exception Handling
 
-- [ ] Use NestJS built-in exceptions consistently:
-  - `BadRequestException`
-  - `NotFoundException`
-  - `ConflictException`
-  - `InternalServerErrorException` where appropriate
-- [ ] Avoid leaking internal database errors.
-- [ ] Explain exception flow in `LEARNING_NOTES.md`.
-- [ ] Add or update tests for error paths.
-- [ ] Run `npm test`.
-- [ ] Run `npm run build`.
-- [ ] Mark Phase 11 complete.
+- [x] Use NestJS built-in exceptions consistently:
+  - `BadRequestException` (already automatic via the global `ValidationPipe` and `ParseUUIDPipe`)
+  - `NotFoundException` (already used in `UsersService`/`TasksService`; now also mapped from Prisma `P2003`/`P2025`)
+  - `ConflictException` (already used in `UsersService`; now also mapped from Prisma `P2002`)
+  - `InternalServerErrorException` where appropriate (new: `PrismaExceptionFilter`'s fallback for unrecognized Prisma errors)
+- [x] Avoid leaking internal database errors. (`src/common/filters/prisma-exception.filter.ts`, registered globally in `main.ts`; logs the real error server-side, returns only a sanitized message)
+- [x] Explain exception flow in `LEARNING_NOTES.md`.
+- [x] Add or update tests for error paths. (`prisma-exception.filter.spec.ts` unit-tests the mapping logic; `prisma-exception.filter.integration.spec.ts` boots a real app + `supertest` to prove the filter is wired correctly and that no raw Prisma message ever reaches the response body)
+- [x] Run `npm test`. (34/34 passing)
+- [x] Run `npm run build`.
+- [x] Mark Phase 11 complete.
+
+Verified beyond the checklist: booted the app against the dev Postgres container and confirmed invalid email (400), malformed UUID param (400), duplicate email (409, via the existing pre-check, not the new filter), and normal create/delete (200/201) all still behave correctly — the new global filter doesn't interfere with existing exception paths, since `@Catch(Prisma.PrismaClientKnownRequestError)` only intercepts unhandled Prisma errors.
 
 ### Phase 12: Logging
 
-- [ ] Add structured NestJS logging around important operations.
-- [ ] Log useful context like ids and operation names.
-- [ ] Avoid logging passwords, tokens, or secrets.
-- [ ] Explain Nest Logger and log levels in `LEARNING_NOTES.md`.
-- [ ] Run `npm test`.
-- [ ] Run `npm run build`.
-- [ ] Mark Phase 12 complete.
+- [x] Add structured NestJS logging around important operations. (`TasksService`/`UsersService` log every create/update/complete/delete via a per-class `Logger`; a global `LoggingInterceptor` logs method/url/status/duration for every request)
+- [x] Log useful context like ids and operation names. (e.g. `Created task id=... userId=...`, `HTTP GET /tasks 200 +12ms`)
+- [x] Avoid logging passwords, tokens, or secrets. (no passwords/tokens exist in this app; went further and never log email addresses either — only ids — even in duplicate-email warnings)
+- [x] Explain Nest Logger and log levels in `LEARNING_NOTES.md`.
+- [x] Run `npm test`. (37/37 passing)
+- [x] Run `npm run build`.
+- [x] Mark Phase 12 complete.
+
+Beyond the checklist: added `logging.interceptor.spec.ts` to test the new interceptor (found and fixed a latent Jest spy-leakage bug while writing it, in both this file and `prisma-exception.filter.spec.ts` — repeated `jest.spyOn` on an already-mocked method reuses the same spy, so call counts leaked across tests without `jest.restoreAllMocks()`). Also booted the app against the dev Postgres container, exercised create/list/duplicate-conflict/not-found/delete, and confirmed in the real log output that ids, operation names, and HTTP status/duration all appear correctly — and grepped the full log for the test email address used, confirming it never appears anywhere.
 
 ### Phase 13: Health Check
 
-- [ ] Add `HealthModule`.
-- [ ] Add `GET /health`.
-- [ ] Check application availability.
-- [ ] Check database connectivity.
-- [ ] Return clear health response.
-- [ ] Add tests for health endpoint.
-- [ ] Run `npm test`.
-- [ ] Run `npm run build`.
-- [ ] Mark Phase 13 complete.
+- [x] Add `HealthModule`. (`src/health/health.module.ts`, imports `@nestjs/terminus`'s `TerminusModule`)
+- [x] Add `GET /health`.
+- [x] Check application availability. (`AppHealthIndicator` — always up, reports `process.uptime()`)
+- [x] Check database connectivity. (`PrismaHealthIndicator` — custom, not Terminus's built-in Mongo-first one; runs `SELECT 1` via `PrismaService` with a 3s timeout, never leaks the raw error)
+- [x] Return clear health response. (Terminus's standard `{status, info, error, details}` shape; 200 when healthy, 503 automatically when any indicator is down)
+- [x] Add tests for health endpoint. (`prisma.health-indicator.spec.ts`, `health.controller.spec.ts`)
+- [x] Run `npm test`. (42/42 passing)
+- [x] Run `npm run build`.
+- [x] Mark Phase 13 complete.
+
+Also added `app.enableShutdownHooks()` in `main.ts` (serves the spec's graceful-shutdown objective directly, and is required for `PrismaService.onModuleDestroy()` to fire on `SIGTERM` — matters for Docker in Phase 16 too). Verified beyond the checklist: booted against the dev Postgres container, confirmed 200 healthy → stopped the container → confirmed 503 with a sanitized message (grepped the response for leaked host/credential details — none found) → restarted the container without restarting the app → confirmed recovery to 200.
 
 ### Phase 14: Swagger/OpenAPI
 
-- [ ] Install Swagger dependencies.
-- [ ] Configure Swagger in `main.ts`.
-- [ ] Document user endpoints.
-- [ ] Document task endpoints.
-- [ ] Document query params.
-- [ ] Document DTOs.
-- [ ] Document response status codes.
-- [ ] Explain why Swagger matters in `LEARNING_NOTES.md`.
-- [ ] Run `npm test`.
-- [ ] Run `npm run build`.
-- [ ] Mark Phase 14 complete.
+- [x] Install Swagger dependencies. (`@nestjs/swagger`, bundles Swagger UI)
+- [x] Configure Swagger in `main.ts`. (`DocumentBuilder` + `SwaggerModule.setup('docs', ...)`, JSON at `/docs/json`)
+- [x] Document user endpoints. (`@ApiTags`/`@ApiOperation`/response codes on all four `UsersController` routes)
+- [x] Document task endpoints. (same on all six `TasksController` routes, plus `@ApiParam` on the `:id` routes)
+- [x] Document query params. (`TaskQueryDto`'s `@ApiPropertyOptional` fields auto-explode into 7 documented query params — verified in the generated JSON)
+- [x] Document DTOs. (`@ApiProperty`/`@ApiPropertyOptional` on every field of every request DTO, plus new documentation-only response classes — `UserResponseDto`, `TaskResponseDto`, `TaskListResponseDto`, `ErrorResponseDto`, `ValidationErrorResponseDto` — each `implements` the real type so `tsc` fails if the docs drift from the schema)
+- [x] Document response status codes. (actual per-route codes, e.g. `POST /users` → 201/400/409, `PATCH /tasks/:id` → 200/400/404 with no 409 since `Task` has no unique constraint)
+- [x] Explain why Swagger matters in `LEARNING_NOTES.md`.
+- [x] Run `npm test`. (42/42 passing)
+- [x] Run `npm run build`.
+- [x] Mark Phase 14 complete.
+
+Real bug found and fixed: `UpdateUserDto`/`UpdateTaskDto` imported `PartialType`/`OmitType` from `@nestjs/mapped-types`, which drops `@ApiProperty` metadata — both would have rendered as an empty `{}` schema. Switched both imports to `@nestjs/swagger`'s versions. Verified beyond the checklist by fetching `/docs/json` and asserting on it directly with `jq`: exact path list (`/`, `/health`, `/tasks`, `/tasks/{id}`, `/tasks/{id}/complete`, `/users`, `/users/me`), exact response-code sets per route, `UpdateUserDto`/`UpdateTaskDto` properties non-empty (proving the fix worked), reusable enum schema components (`TaskStatus`, `TaskPriority`, `TaskSortBy`, `SortOrder`), and `GET /tasks`'s 200 response resolving to `$ref: TaskListResponseDto`. Also confirmed `/docs` loads (200) and normal CRUD still works unaffected.
 
 ### Phase 15: E2E Tests
 
-- [ ] Replace default starter E2E test.
-- [ ] Add E2E test flow:
+- [x] Replace default starter E2E test. (`test/app.e2e-spec.ts` now also checks `/health`; two new files added)
+- [x] Add E2E test flow:
   - create user
   - create task
   - get task
   - update task
   - complete task
   - delete task
-- [ ] Add invalid input tests.
-- [ ] Add missing resource tests.
-- [ ] Use a test database strategy.
-- [ ] Run `npm run test:e2e`.
-- [ ] Run `npm run build`.
-- [ ] Mark Phase 15 complete.
+- [x] Add invalid input tests. (missing/invalid fields, bad enums, malformed UUIDs in body and route params, unknown fields via `forbidNonWhitelisted`)
+- [x] Add missing resource tests. (404s for users/tasks, plus `POST /tasks` with a non-existent `userId`)
+- [x] Use a test database strategy. (a second database, `task_management_api_test`, on the existing dev Postgres container — see `test/setup/global-setup.ts`/`load-test-env.ts`)
+- [x] Run `npm run test:e2e`. (24/24 passing)
+- [x] Run `npm run build`.
+- [x] Mark Phase 15 complete.
+
+Real bug found and fixed just by attempting this phase: `npm run start:prod` (`node dist/main`) was silently broken — `nest build` was actually emitting `dist/src/main.js`, not `dist/main.js`, because `tsconfig.build.json` had no `include` and TypeScript nested output under `src/` to preserve the project's common root (which included `prisma.config.ts` at the repo root). Fixed with `"include": ["src/**/*"]`; verified both `nest start` (dev) and `start:prod` boot correctly afterward. Also extracted `src/app.setup.ts` (`configureApp(app)`) so E2E tests exercise the exact same `ValidationPipe`/`PrismaExceptionFilter`/`LoggingInterceptor`/`enableShutdownHooks` as production — without this, none of the 400/409 assertions in the new specs would have meant anything.
+
+A bug in the tests themselves (not the app) was caught and fixed during verification: a pagination/sort test asserted the wrong task would land on page 2 of an alphabetically-sorted list.
 
 ### Phase 16: Docker
 
-Note: `docker-compose.development.yml` (dev-only Postgres container, no app container) was added early to support Phase 7 work. The remaining items below are still open.
+Note: `docker-compose.development.yml` (dev-only Postgres container, no app container) was added early to support Phase 7 work.
 
-- [ ] Add `Dockerfile`.
-- [ ] Add `docker-compose.yml`.
-- [ ] Run NestJS app container.
-- [ ] Run PostgreSQL container.
-- [ ] Add database health check.
-- [ ] Use environment variables.
-- [ ] Document local Docker startup.
-- [ ] Explain production vs development Docker concerns in `LEARNING_NOTES.md`.
-- [ ] Verify Docker Compose starts app and database.
-- [ ] Mark Phase 16 complete.
+- [x] Add `Dockerfile`. (four stages: `deps`, `builder`, `prod-deps`, `runner` — `node:24-bookworm-slim`, non-root `node` user)
+- [x] Add `docker-compose.yml`. (distinct from the dev-only file — `postgres`, `migrate`, `api` services)
+- [x] Run NestJS app container.
+- [x] Run PostgreSQL container.
+- [x] Add database health check. (Postgres's `pg_isready`, plus the `api` service's own healthcheck hitting `GET /health` from Phase 13)
+- [x] Use environment variables. (`DATABASE_URL` pointed at the `postgres` service name over the compose network, never the host's `.env`)
+- [x] Document local Docker startup. (done as part of Phase 17's README rewrite, referencing the final `docker:up`/`docker:down` scripts)
+- [x] Explain production vs development Docker concerns in `LEARNING_NOTES.md`.
+- [x] Verify Docker Compose starts app and database.
+- [x] Mark Phase 16 complete.
+
+**Real incident during verification, documented in full in `LEARNING_NOTES.md`:** the first `docker compose up` for the new file printed `Container task-management-api-postgres-dev Recreate` — a container name that file never mentions. Neither compose file declared an explicit project `name:`, so both defaulted to the same directory-derived project name, and Compose's `(project, service-name)` reconciliation considered both files' identically-named `postgres` service the same container — replacing one with the other on every `up`. The dev container briefly vanished from `docker ps -a`. No data was lost (the named volume survived independently and was confirmed intact — same three migrations, same timestamps, after recovery), but it was caught by checking, not assumed. Fixed with two changes: both compose files now declare distinct explicit `name:` fields, and the dev file's volume is now pinned `external: true` with its exact existing name (necessary because changing the project name alone would have made Compose resolve a different, empty volume instead of reattaching to the real data).
+
+Also caught and fixed during the `builder` stage's first build: Prisma warned about failing to detect the OpenSSL version on `bookworm-slim` (which doesn't ship it by default) — added `apt-get install -y openssl` to the base stage per Prisma's own suggestion.
+
+Verified beyond the checklist: built the `builder` stage standalone first (proving `prisma generate` + `nest build` work inside Linux) before the full image; confirmed `node_modules/.prisma` must be copied from `builder` into `runner` separately from the `--omit=dev` install (`@prisma/client`'s own code just re-exports from it) via `docker run ... node -e "require('@prisma/client')"`; ran a full CRUD smoke test (health, create user, create task, list tasks, delete) against the actual containerized stack; confirmed `docker compose restart api` shuts down and restarts cleanly; confirmed a full `down`/`up` cycle is idempotent (`migrate` logs "No pending migrations to apply" the second time); and confirmed — after the incident above — that the two compose stacks now run simultaneously with zero interference, and that `npm run test:e2e` (which depends on the dev container) still passes unaffected.
 
 ### Phase 17: Final Documentation
 
-- [ ] Update `README.md`.
-- [ ] Document setup.
-- [ ] Document environment variables.
-- [ ] Document database migration commands.
-- [ ] Document running tests.
-- [ ] Document running with Docker.
-- [ ] Document Swagger URL.
-- [ ] Keep `PROJECT_PLAN.md` updated.
-- [ ] Mark Phase 17 complete.
+- [x] Update `README.md`. (full rewrite — was 100% unmodified Nest starter boilerplate)
+- [x] Document setup.
+- [x] Document environment variables. (matches `src/config/env.ts` exactly — just `PORT`/`DATABASE_URL`)
+- [x] Document database migration commands.
+- [x] Document running tests. (unit vs E2E, including the E2E test-database strategy)
+- [x] Document running with Docker. (both compose setups explained distinctly, with their different `DATABASE_URL`s)
+- [x] Document Swagger URL.
+- [x] Keep `PROJECT_PLAN.md` updated.
+- [x] Mark Phase 17 complete.
+
+Verified beyond the checklist: every script name in the README's tables diffed against actual `package.json` keys (added a missing `test:debug` row); `npm run prisma:generate` and `npm run prisma:migrate:deploy` actually run as documented; booted the app and confirmed every claimed URL (`/`, `/docs`, `/docs/json`, `/health`) returns exactly what the README shows, including the literal health-check payload shape.
 
 ### Phase 18: Final Verification
 
-- [ ] Run `npm run build`.
-- [ ] Run `npm test`.
-- [ ] Run `npm run test:e2e`.
-- [ ] Verify Swagger opens.
-- [ ] Verify Docker Compose starts app and database.
-- [ ] Verify all required routes work.
-- [ ] Confirm all `PROJECT_SPEC.md` requirements are covered.
-- [ ] Mark project complete in `PROJECT_PLAN.md`.
+- [x] Run `npm run build`.
+- [x] Run `npm test`. (42/42 passing)
+- [x] Run `npm run test:e2e`. (24/24 passing, against the dedicated test database)
+- [x] Verify Swagger opens. (`/docs` and `/docs/json` both confirmed 200)
+- [x] Verify Docker Compose starts app and database. (`npm run docker:up` — postgres healthy, migrate exited 0, api healthy)
+- [x] Verify all required routes work. (all 11 routes walked end-to-end against the containerized stack: `/`, `/health`, `/docs`, full user lifecycle, full task lifecycle including complete/cascade-delete)
+- [x] Confirm all `PROJECT_SPEC.md` requirements are covered.
+- [x] Mark project complete in `PROJECT_PLAN.md`.
+
+Coverage review against `PROJECT_SPEC.md`'s Functional Requirements and NestJS Concepts lists: every user/task CRUD operation, every task field, every enum, every suggested route, and every listed query param is implemented. Modules/Controllers/Providers/DI/DTOs/Validation/Exception-Handling/Database/Health/Logging/Swagger/Testing/Docker are all present and explained in `LEARNING_NOTES.md`, including a dedicated "Full Request Lifecycle" section added during this phase after noticing it was named explicitly in the spec but hadn't been tied together as one coherent explanation yet.
+
+Two spec-listed concepts are **deliberately** not implemented, per this project's own long-standing assumptions (stated since Phase 5/8): `UnauthorizedException`/`ForbiddenException` have no natural trigger point because there is no authentication (`/users/me` = most recently created user, by design); Prisma transactions were never needed because no operation in this app writes to more than one table atomically. Both are called out explicitly in `README.md`'s "Known limitations" and `LEARNING_NOTES.md`, not silently omitted.
+
+The one structural naming divergence from the spec's suggested architecture (`DatabaseModule` → this project's `PrismaModule`, same role) was a deliberate choice made and documented back in Phase 7.
 
 ## Testing Checklist
 
-- [ ] Run `npm test` after unit-level changes.
-- [ ] Run `npm run build` after TypeScript/module changes.
-- [ ] Run `npm run test:e2e` after API behavior changes.
-- [ ] Verify Docker only after Docker files are added.
-- [ ] Do not mark a phase complete if relevant tests are failing.
+- [x] Run `npm test` after unit-level changes.
+- [x] Run `npm run build` after TypeScript/module changes.
+- [x] Run `npm run test:e2e` after API behavior changes.
+- [x] Verify Docker only after Docker files are added.
+- [x] Do not mark a phase complete if relevant tests are failing.
 
 ## Documentation Checklist
 
-- [ ] Keep `PROJECT_PLAN.md` updated after every phase.
-- [ ] Keep `LEARNING_NOTES.md` updated after every phase.
-- [ ] Update `README.md` near the end of the project.
-- [ ] Document every dependency added.
-- [ ] Document how to run the app locally.
-- [ ] Document how to run tests.
-- [ ] Document how to run with Docker.
+- [x] Keep `PROJECT_PLAN.md` updated after every phase.
+- [x] Keep `LEARNING_NOTES.md` updated after every phase.
+- [x] Update `README.md` near the end of the project.
+- [x] Document every dependency added. (`README.md`'s Tech Stack section; each dependency's purpose also explained in `LEARNING_NOTES.md` at the phase it was introduced)
+- [x] Document how to run the app locally.
+- [x] Document how to run tests.
+- [x] Document how to run with Docker.
 
 ## Completion Checklist
 
-- [ ] Users API is complete.
-- [ ] Tasks API is complete.
-- [ ] PostgreSQL and Prisma are integrated.
-- [ ] Filtering, searching, sorting, and pagination work.
-- [ ] Validation is complete.
-- [ ] Exceptions are consistent.
-- [ ] Logging is present and safe.
-- [ ] Health endpoint checks app and database.
-- [ ] Swagger documentation is available.
-- [ ] Unit tests cover core behavior.
-- [ ] E2E tests cover required flows.
-- [ ] Docker setup runs app and database.
-- [ ] `README.md` explains the project clearly.
-- [ ] `LEARNING_NOTES.md` explains the required NestJS concepts.
-- [ ] All final verification commands pass.
+- [x] Users API is complete.
+- [x] Tasks API is complete.
+- [x] PostgreSQL and Prisma are integrated.
+- [x] Filtering, searching, sorting, and pagination work.
+- [x] Validation is complete.
+- [x] Exceptions are consistent.
+- [x] Logging is present and safe.
+- [x] Health endpoint checks app and database.
+- [x] Swagger documentation is available.
+- [x] Unit tests cover core behavior.
+- [x] E2E tests cover required flows.
+- [x] Docker setup runs app and database.
+- [x] `README.md` explains the project clearly.
+- [x] `LEARNING_NOTES.md` explains the required NestJS concepts.
+- [x] All final verification commands pass.
 
 ## Assumptions
 
