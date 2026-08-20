@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { TasksService } from './tasks.service';
+import { SortOrder, TaskSortBy } from './dto/task-query.dto';
 import { TaskPriority } from './task-priority.enum';
 import { TaskStatus } from './task-status.enum';
 
@@ -65,7 +66,114 @@ describe('TasksService', () => {
       userId,
     });
 
-    expect(service.findAll()).toEqual([firstTask, secondTask]);
+    const result = service.findAll();
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items).toContain(firstTask);
+    expect(result.items).toContain(secondTask);
+    expect(result.page).toBe(1);
+    expect(result.limit).toBe(20);
+    expect(result.total).toBe(2);
+    expect(result.totalPages).toBe(1);
+  });
+
+  it('filters tasks by status and priority', () => {
+    service.create({
+      title: 'Low priority todo',
+      status: TaskStatus.TODO,
+      priority: TaskPriority.LOW,
+      userId,
+    });
+    const matchingTask = service.create({
+      title: 'High priority done',
+      status: TaskStatus.DONE,
+      priority: TaskPriority.HIGH,
+      userId,
+    });
+
+    expect(
+      service.findAll({
+        status: TaskStatus.DONE,
+        priority: TaskPriority.HIGH,
+      }),
+    ).toEqual({
+      items: [matchingTask],
+      page: 1,
+      limit: 20,
+      total: 1,
+      totalPages: 1,
+    });
+  });
+
+  it('searches tasks by title', () => {
+    const matchingTask = service.create({
+      title: 'Learn NestJS pipes',
+      userId,
+    });
+    service.create({
+      title: 'Write Docker notes',
+      userId,
+    });
+
+    expect(
+      service.findAll({
+        search: 'nestjs',
+      }),
+    ).toEqual({
+      items: [matchingTask],
+      page: 1,
+      limit: 20,
+      total: 1,
+      totalPages: 1,
+    });
+  });
+
+  it('sorts tasks', () => {
+    const firstTask = service.create({
+      title: 'B task',
+      userId,
+    });
+    const secondTask = service.create({
+      title: 'A task',
+      userId,
+    });
+
+    expect(
+      service.findAll({
+        sortBy: TaskSortBy.TITLE,
+        sortOrder: SortOrder.ASC,
+      }).items,
+    ).toEqual([secondTask, firstTask]);
+  });
+
+  it('paginates tasks', () => {
+    service.create({
+      title: 'First task',
+      userId,
+    });
+    const secondTask = service.create({
+      title: 'Second task',
+      userId,
+    });
+    service.create({
+      title: 'Third task',
+      userId,
+    });
+
+    expect(
+      service.findAll({
+        page: 2,
+        limit: 1,
+        sortBy: TaskSortBy.TITLE,
+        sortOrder: SortOrder.ASC,
+      }),
+    ).toEqual({
+      items: [secondTask],
+      page: 2,
+      limit: 1,
+      total: 3,
+      totalPages: 3,
+    });
   });
 
   it('finds one task by id', () => {
@@ -128,7 +236,7 @@ describe('TasksService', () => {
 
     service.remove(task.id);
 
-    expect(service.findAll()).toEqual([]);
+    expect(service.findAll().items).toEqual([]);
   });
 
   it('throws when deleting a missing task', () => {

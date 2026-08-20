@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { SortOrder, TaskQueryDto, TaskSortBy } from './dto/task-query.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskPriority } from './task-priority.enum';
 import { TaskStatus } from './task-status.enum';
@@ -15,6 +16,14 @@ export interface Task {
   userId: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface TaskListResponse {
+  items: Task[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }
 
 @Injectable()
@@ -38,8 +47,39 @@ export class TasksService {
     return task;
   }
 
-  findAll(): Task[] {
-    return this.tasks;
+  findAll(query: TaskQueryDto = {}): TaskListResponse {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const sortBy = query.sortBy ?? TaskSortBy.CREATED_AT;
+    const sortOrder = query.sortOrder ?? SortOrder.DESC;
+    const search = query.search?.trim().toLowerCase();
+
+    const filteredTasks = this.tasks.filter((task) => {
+      const matchesStatus = query.status ? task.status === query.status : true;
+      const matchesPriority = query.priority
+        ? task.priority === query.priority
+        : true;
+      const matchesSearch = search
+        ? task.title.toLowerCase().includes(search)
+        : true;
+
+      return matchesStatus && matchesPriority && matchesSearch;
+    });
+
+    const sortedTasks = [...filteredTasks].sort((firstTask, secondTask) =>
+      this.compareTasks(firstTask, secondTask, sortBy, sortOrder),
+    );
+    const total = sortedTasks.length;
+    const startIndex = (page - 1) * limit;
+    const items = sortedTasks.slice(startIndex, startIndex + limit);
+
+    return {
+      items,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   findOne(id: string): Task {
@@ -63,5 +103,43 @@ export class TasksService {
   remove(id: string): void {
     const task = this.findOne(id);
     this.tasks = this.tasks.filter((t) => t.id !== task.id);
+  }
+
+  private compareTasks(
+    firstTask: Task,
+    secondTask: Task,
+    sortBy: TaskSortBy,
+    sortOrder: SortOrder,
+  ): number {
+    const direction = sortOrder === SortOrder.ASC ? 1 : -1;
+    const firstValue = this.getSortableValue(firstTask, sortBy);
+    const secondValue = this.getSortableValue(secondTask, sortBy);
+
+    if (firstValue === secondValue) {
+      return 0;
+    }
+
+    if (firstValue === null) {
+      return 1;
+    }
+
+    if (secondValue === null) {
+      return -1;
+    }
+
+    return firstValue > secondValue ? direction : -direction;
+  }
+
+  private getSortableValue(
+    task: Task,
+    sortBy: TaskSortBy,
+  ): string | number | null {
+    const value = task[sortBy];
+
+    if (value instanceof Date) {
+      return value.getTime();
+    }
+
+    return value;
   }
 }

@@ -34,7 +34,7 @@ Important limitations:
 
 - [x] Phase 0: Baseline Review
 - [x] Phase 1: Learning Notes Setup
-- [ ] Phase 2: Clean Current Task Module
+- [x] Phase 2: Clean Current Task Module
 - [ ] Phase 3: Add Task Query DTO
 - [ ] Phase 4: Add Complete Task Endpoint
 - [ ] Phase 5: Users Module
@@ -100,12 +100,12 @@ Baseline notes:
   - not found error
 - [x] Run `npm test`.
 - [x] Run `npm run build`.
-- [ ] Mark Phase 2 complete.
+- [x] Mark Phase 2 complete.
 
 ### Phase 3: Add Task Query DTO
 
-- [ ] Create `TaskQueryDto`.
-- [ ] Add validation for:
+- [x] Create `TaskQueryDto`.
+- [x] Add validation for:
   - `page`
   - `limit`
   - `status`
@@ -113,17 +113,17 @@ Baseline notes:
   - `search`
   - `sortBy`
   - `sortOrder`
-- [ ] Wire query DTO into `GET /tasks`.
-- [ ] Implement in-memory filtering, searching, sorting, and pagination first.
-- [ ] Return list metadata:
+- [x] Wire query DTO into `GET /tasks`.
+- [x] Implement in-memory filtering, searching, sorting, and pagination first.
+- [x] Return list metadata:
   - `items`
   - `page`
   - `limit`
   - `total`
   - `totalPages`
-- [ ] Add tests for task query behavior.
-- [ ] Run `npm test`.
-- [ ] Run `npm run build`.
+- [x] Add tests for task query behavior.
+- [x] Run `npm test`.
+- [x] Run `npm run build`.
 - [ ] Mark Phase 3 complete.
 
 ### Phase 4: Add Complete Task Endpoint

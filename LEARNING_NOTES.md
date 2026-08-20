@@ -241,3 +241,54 @@ Why this separation matters:
 Express equivalent:
 
 - In Express, this same separation is possible but manual. A route handler would receive `req` and `res`, then call a separate service function. NestJS encourages that structure by default.
+
+## Query Parameters and Pagination
+
+Query parameters are values passed after `?` in a URL.
+
+Example:
+
+```text
+GET /tasks?page=1&limit=20&status=TODO&search=nestjs
+```
+
+In NestJS, controllers can read query parameters with `@Query()`.
+
+In this project, `TaskQueryDto` describes the allowed query parameters for `GET /tasks`:
+
+- `page`: which page of results to return.
+- `limit`: how many tasks to return per page.
+- `status`: filter by task status.
+- `priority`: filter by task priority.
+- `search`: search by task title.
+- `sortBy`: choose which field to sort by.
+- `sortOrder`: choose ascending or descending order.
+
+Why use a DTO for query parameters:
+
+- The API only accepts known query parameters.
+- Invalid enum values can be rejected before reaching the service.
+- Number-like query strings can be transformed into numbers.
+- The service can receive a clear object instead of manually reading raw strings.
+
+Pagination response shape:
+
+```ts
+{
+  items: Task[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+```
+
+Why include metadata:
+
+- `items` contains the actual data for the current page.
+- `total` tells the client how many matching records exist.
+- `totalPages` helps the client know whether more pages are available.
+
+Express equivalent:
+
+- In Express, you would usually read `req.query.page`, `req.query.limit`, and other values manually, convert strings to numbers yourself, validate them, and pass them into a service.
