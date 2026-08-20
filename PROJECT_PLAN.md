@@ -23,13 +23,14 @@ Done so far:
 - Prisma is fully set up (Phase 7 complete): `prisma/schema.prisma` defines `User`/`Task` models, `TaskStatus`/`TaskPriority` enums, the user-task relation, and indexes on `userId`/`status`/`priority`/`dueDate`; two migrations have been created and applied against a local dev Postgres container.
 - `PrismaModule`/`PrismaService` exist and are wired into `AppModule`, using the `@prisma/adapter-pg` driver adapter required by Prisma 7.
 - Prisma schema, migrations, generated client, and connection handling are explained in `LEARNING_NOTES.md`.
+- `UsersService` is fully Prisma-backed (Phase 8 complete): create/view/update/delete all go through `PrismaService`, with case-insensitive duplicate-email handling and the temporary current-user now derived from the database instead of an in-memory pointer.
 - `docker-compose.development.yml` provides a local dev Postgres container (ahead of the full Phase 16 Docker setup, which still needs a `Dockerfile` and an app+db compose file).
 - The app builds successfully.
 - The current test suite passes.
 
 Important limitations:
 
-- Tasks and users are still stored in memory, not read/written through Prisma yet (`TasksService`/`UsersService` haven't been migrated — that's Phases 8 and 9).
+- Tasks are still stored in memory, not read/written through Prisma yet (`TasksService` hasn't been migrated — that's Phase 9).
 - Task list filtering, searching, sorting, and pagination are not implemented against a real database yet (still in-memory).
 - Swagger, full Docker (app container + Dockerfile), logging, health checks, and real E2E coverage are not implemented yet.
 
@@ -43,7 +44,7 @@ Important limitations:
 - [x] Phase 5: Users Module
 - [x] Phase 6: Configuration
 - [x] Phase 7: PostgreSQL + Prisma Setup
-- [ ] Phase 8: Move Users to Prisma
+- [x] Phase 8: Move Users to Prisma
 - [ ] Phase 9: Move Tasks to Prisma
 - [ ] Phase 10: Real Task Listing
 - [ ] Phase 11: Exception Handling
@@ -194,17 +195,19 @@ Baseline notes:
 
 ### Phase 8: Move Users to Prisma
 
-- [ ] Replace temporary user storage with Prisma.
-- [ ] Implement create user.
-- [ ] Implement view profile.
-- [ ] Implement update profile.
-- [ ] Implement delete account.
-- [ ] Handle duplicate user conflicts.
-- [ ] Handle missing user errors.
-- [ ] Add Prisma-mocked unit tests.
-- [ ] Run `npm test`.
-- [ ] Run `npm run build`.
-- [ ] Mark Phase 8 complete.
+- [x] Replace temporary user storage with Prisma. (in-memory array + `currentUserId` pointer removed; current user is now derived via `prisma.user.findFirst({ orderBy: { createdAt: 'desc' } })`)
+- [x] Implement create user.
+- [x] Implement view profile.
+- [x] Implement update profile.
+- [x] Implement delete account.
+- [x] Handle duplicate user conflicts. (case-insensitive email check, `ConflictException`)
+- [x] Handle missing user errors. (`NotFoundException` when no user exists)
+- [x] Add Prisma-mocked unit tests. (`users.service.spec.ts` mocks `PrismaService` via Nest's testing module)
+- [x] Run `npm test`. (27/27 passing)
+- [x] Run `npm run build`.
+- [x] Mark Phase 8 complete.
+
+Verification beyond the checklist: booted the app against the dev Postgres container and exercised `POST /users`, `GET /users/me`, `PATCH /users/me`, duplicate-email `POST /users` (409), `DELETE /users/me` (200), and `GET /users/me` after deletion (404) with real `curl` requests — all behaved correctly against the actual database, not just mocks.
 
 ### Phase 9: Move Tasks to Prisma
 

@@ -1,30 +1,30 @@
 import { Body, Controller, Delete, Get, Patch, Post } from '@nestjs/common';
+import { User } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
-import type { User } from './users.service';
 
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  create(@Body() dto: CreateUserDto): User {
+  create(@Body() dto: CreateUserDto): Promise<User> {
     return this.usersService.create(dto);
   }
 
   @Get('me')
-  findCurrentUser(): User {
+  findCurrentUser(): Promise<User> {
     return this.usersService.findCurrentUser();
   }
 
   @Patch('me')
-  updateCurrentUser(@Body() dto: UpdateUserDto): User {
+  updateCurrentUser(@Body() dto: UpdateUserDto): Promise<User> {
     return this.usersService.updateCurrentUser(dto);
   }
 
   @Delete('me')
-  deleteCurrentUser(): void {
-    this.usersService.deleteCurrentUser();
+  deleteCurrentUser(): Promise<void> {
+    return this.usersService.deleteCurrentUser();
   }
 }

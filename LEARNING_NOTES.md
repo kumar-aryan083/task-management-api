@@ -331,7 +331,7 @@ Express equivalent:
 It contains:
 
 - `UsersController`: HTTP routes for user actions.
-- `UsersService`: temporary in-memory user storage and user business logic.
+- `UsersService`: user business logic, backed by `PrismaService` (see "Prisma and PostgreSQL" below).
 - `CreateUserDto`: request body rules for creating a user.
 - `UpdateUserDto`: request body rules for updating a user.
 
@@ -355,7 +355,7 @@ Current user fields:
 Temporary current-user behavior:
 
 - The project does not have authentication yet.
-- For now, the most recently created user becomes the temporary current user.
+- The most recently created user is still the temporary current user — but this is now derived directly from the database (`prisma.user.findFirst({ orderBy: { createdAt: 'desc' } })`) instead of an in-memory pointer variable. This means the "current user" survives an app restart, since it comes from real stored data rather than process memory.
 - `/users/me` reads, updates, or deletes that temporary current user.
 - This keeps the beginner API moving without adding guards, JWTs, sessions, or passwords too early.
 
@@ -363,7 +363,6 @@ Why this is temporary:
 
 - A real API should not decide the current user from the most recently created user.
 - Later projects or phases can introduce authentication properly.
-- When Prisma is added, users will be stored in PostgreSQL instead of an in-memory array.
 
 Validation rules:
 
@@ -374,7 +373,7 @@ Validation rules:
 
 Error behavior:
 
-- Creating a user with an existing email throws `ConflictException`.
+- Creating a user with an existing email throws `ConflictException`. The duplicate check is case-insensitive (`mode: 'insensitive'` in the Prisma query), matching the original in-memory behavior — `Aryan@example.com` and `aryan@example.com` are treated as the same email.
 - Reading, updating, or deleting `/users/me` with no temporary current user throws `NotFoundException`.
 
 Express equivalent:
@@ -382,6 +381,19 @@ Express equivalent:
 - In Express, user routes would usually live in a user router file.
 - Validation would usually happen through middleware or explicit schema parsing.
 - The router would manually call service functions for create, read, update, and delete behavior.
+
+### Phase 8: Users moved to Prisma
+
+`UsersService` no longer keeps a private `users: User[]` array or a `currentUserId` pointer. Every method now goes through `PrismaService`:
+
+- `create(dto)`: checks for a case-insensitive duplicate email (`ensureEmailIsAvailable`), then `prisma.user.create(...)`.
+- `findCurrentUser()`: `prisma.user.findFirst({ orderBy: { createdAt: 'desc' } })` — the most recently created row, throwing `NotFoundException` if the table is empty.
+- `updateCurrentUser(dto)`: re-checks email availability only if the email actually changed (excluding the current user's own row via `id: { not: user.id }`), then `prisma.user.update(...)`.
+- `deleteCurrentUser()`: `prisma.user.delete({ where: { id: user.id } })`.
+
+Because every method is now asynchronous (Prisma calls return promises), `UsersController`'s methods now return `Promise<User>` instead of `User`, and `User` is imported from `@prisma/client` instead of a hand-written interface.
+
+Testing change: `users.service.spec.ts` no longer calls the real database. It provides a mocked `PrismaService` (plain `jest.fn()`s for `user.create`/`findFirst`/`update`/`delete`) via Nest's testing module `providers` array — `{ provide: PrismaService, useValue: prisma }`. This keeps unit tests fast and independent of Postgres, while the actual database interaction was verified separately by booting the app against the dev Postgres container and exercising `/users` end to end with `curl`.
 
 ## Configuration
 

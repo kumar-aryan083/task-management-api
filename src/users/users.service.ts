@@ -3,42 +3,30 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { User } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 @Injectable()
 export class UsersService {
-  private users: User[] = [];
-  private currentUserId: string | null = null;
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: CreateUserDto): User {
-    this.ensureEmailIsAvailable(dto.email);
+  async create(dto: CreateUserDto): Promise<User> {
+    await this.ensureEmailIsAvailable(dto.email);
 
-    const now = new Date();
-    const user: User = {
-      id: randomUUID(),
-      name: dto.name,
-      email: dto.email,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    this.users.push(user);
-    this.currentUserId = user.id;
-    return user;
+    return this.prisma.user.create({
+      data: {
+        name: dto.name,
+        email: dto.email,
+      },
+    });
   }
 
-  findCurrentUser(): User {
-    const user = this.users.find((item) => item.id === this.currentUserId);
+  async findCurrentUser(): Promise<User> {
+    const user = await this.prisma.user.findFirst({
+      orderBy: { createdAt: 'desc' },
+    });
 
     if (!user) {
       throw new NotFoundException('Current user not found');
@@ -47,34 +35,36 @@ export class UsersService {
     return user;
   }
 
-  updateCurrentUser(dto: UpdateUserDto): User {
-    const user = this.findCurrentUser();
+  async updateCurrentUser(dto: UpdateUserDto): Promise<User> {
+    const user = await this.findCurrentUser();
 
-    if (dto.email && dto.email !== user.email) {
-      this.ensureEmailIsAvailable(dto.email);
+    if (dto.email && dto.email.toLowerCase() !== user.email.toLowerCase()) {
+      await this.ensureEmailIsAvailable(dto.email, user.id);
     }
 
-    Object.assign(user, {
-      ...dto,
-      updatedAt: new Date(),
+    return this.prisma.user.update({
+      where: { id: user.id },
+      data: dto,
+    });
+  }
+
+  async deleteCurrentUser(): Promise<void> {
+    const user = await this.findCurrentUser();
+    await this.prisma.user.delete({ where: { id: user.id } });
+  }
+
+  private async ensureEmailIsAvailable(
+    email: string,
+    excludeUserId?: string,
+  ): Promise<void> {
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        email: { equals: email, mode: 'insensitive' },
+        ...(excludeUserId ? { id: { not: excludeUserId } } : {}),
+      },
     });
 
-    return user;
-  }
-
-  deleteCurrentUser(): void {
-    const user = this.findCurrentUser();
-    this.users = this.users.filter((item) => item.id !== user.id);
-    this.currentUserId = null;
-  }
-
-  private ensureEmailIsAvailable(email: string): void {
-    const normalizedEmail = email.toLowerCase();
-    const user = this.users.find(
-      (item) => item.email.toLowerCase() === normalizedEmail,
-    );
-
-    if (user) {
+    if (existing) {
       throw new ConflictException(`User with email ${email} already exists`);
     }
   }
