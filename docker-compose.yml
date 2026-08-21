@@ -9,9 +9,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-task_management_api}
-    # No published port: the app and migrate services reach this container
-    # over the internal Docker network (host "postgres", port 5432), and this
-    # host already has other Postgres instances on 5432/5433.
+    # The app and migrate services reach this container over the internal
+    # Docker network (host "postgres", port 5432) regardless of the mapping
+    # below. The host port is published so host-side tools (npx prisma
+    # studio, psql, a GUI client) can inspect the same running database.
+    ports:
+      - '5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
